@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeskBuddy Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #0f1117; color: #e0e4ea; padding: 20px; max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+  .card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .label { font-size: 11px; color: #6a7080; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .value { font-size: 22px; font-weight: 600; color: #4ecb71; }
+  .value-sm { font-size: 14px; color: #e0e4ea; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .metric { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 10px 12px; }
+  .states { display: flex; flex-wrap: wrap; gap: 6px; }
+  .state-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #2a2d3a; background: transparent; color: #6a7080; font-size: 12px; font-family: monospace; cursor: pointer; }
+  .state-btn:hover { border-color: #4ecb71; color: #4ecb71; }
+  .state-btn.active { background: #0d2818; border-color: #4ecb71; color: #4ecb71; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot-green { background: #4ecb71; }
+  .dot-red { background: #e64e4e; }
+  .dot-amber { background: #e6b84e; }
+  .dot-gray { background: #4a4e5a; }
+  .text { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; }
+  #error { color: #e64e4e; font-size: 12px; padding: 8px; display: none; }
+</style>
+</head>
+<body>
+<h1>DeskBuddy Dashboard</h1>
+<div id="error"></div>
+
+<div class="card">
+  <div class="label">Current state</div>
+  <div class="value" id="state">--</div>
+  <div class="text" id="alt-text" style="margin-top: 6px; color: #6a7080;">--</div>
+</div>
+
+<div class="grid" style="margin-bottom: 12px;">
+  <div class="metric">
+    <div class="label">Location</div>
+    <div class="value-sm" id="location">--</div>
+  </div>
+  <div class="metric">
+    <div class="label">Calendar</div>
+    <div class="value-sm" id="calendar">--</div>
+  </div>
+</div>
+
+<div class="grid3" style="margin-bottom: 12px;">
+  <div class="metric">
+    <div class="label">Moisture</div>
+    <div class="value-sm"><span id="moisture-dot" class="dot dot-gray"></span><span id="moisture">--</span></div>
+  </div>
+  <div class="metric">
+    <div class="label">Light</div>
+    <div class="value-sm"><span id="light-dot" class="dot dot-gray"></span><span id="light">--</span></div>
+  </div>
+  <div class="metric">
+    <div class="label">Jira</div>
+    <div class="value-sm" id="jira">--</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="label">Manual override</div>
+  <div class="states" id="override-btns"></div>
+</div>
+
+<div class="card">
+  <div class="label">Server health</div>
+  <div id="health" style="font-size: 12px; color: #6a7080;">Loading...</div>
+</div>
+
+<script>
+const STATES = [
+  "coding","meeting","rooftop","focus","idle",
+  "happy","thirsty","loved","sleeping","overwatered"
+];
+
+const btnContainer = document.getElementById("override-btns");
+STATES.forEach(s => {
+  const btn = document.createElement("button");
+  btn.className = "state-btn";
+  btn.textContent = s;
+  btn.onclick = () => override(s);
+  btnContainer.appendChild(btn);
+});
+
+function dotClass(status) {
+  if (status === "good" || status === "bright") return "dot-green";
+  if (status === "dry" || status === "dark") return "dot-red";
+  if (status === "soggy") return "dot-amber";
+  return "dot-gray";
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/status");
+    const d = await res.json();
+
+    document.getElementById("state").textContent = d.state;
+    document.getElementById("alt-text").textContent = (d.alternatingText || []).join(" / ");
+    document.getElementById("location").textContent = d.locationLabel || d.location;
+    document.getElementById("moisture").textContent = d.plant.moisture !== null ? d.plant.moisture + "%" : "--";
+    document.getElementById("moisture-dot").className = "dot " + dotClass(d.plant.moistureStatus);
+    document.getElementById("light").textContent = d.plant.light !== null ? d.plant.light + " lux" : "--";
+    document.getElementById("light-dot").className = "dot " + dotClass(d.plant.lightStatus);
+
+    const cal = d.calendar;
+    if (cal.inMeeting) {
+      document.getElementById("calendar").textContent = "In: " + (cal.currentMeeting || "meeting");
+    } else if (cal.nextMeeting) {
+      document.getElementById("calendar").textContent = cal.nextMeeting + " in " + cal.nextMeetingIn + "m";
+    } else {
+      document.getElementById("calendar").textContent = "Free";
+    }
+
+    const jira = d.jira || {};
+    document.getElementById("jira").textContent = jira.currentTask || "No task";
+
+    document.querySelectorAll(".state-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.textContent === d.state);
+    });
+
+    document.getElementById("error").style.display = "none";
+  } catch (e) {
+    document.getElementById("error").textContent = "Connection failed: " + e.message;
+    document.getElementById("error").style.display = "block";
+  }
+}
+
+async function fetchHealth() {
+  try {
+    const res = await fetch("/health");
+    const h = await res.json();
+    const el = document.getElementById("health");
+    el.innerHTML = [
+      "Uptime: " + Math.floor(h.uptime / 60) + "m",
+      "Sensors: " + (h.lastSensorUpdate ? timeSince(h.lastSensorUpdate) : "never"),
+      "Location: " + (h.lastLocationUpdate ? timeSince(h.lastLocationUpdate) : "never"),
+      "Calendar: " + (h.calendarConnected ? "ok" : "disconnected"),
+      "Jira: " + (h.jiraConnected ? "ok" : "disconnected"),
+    ].join(" &middot; ");
+  } catch {}
+}
+
+function timeSince(iso) {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return s + "s ago";
+  return Math.floor(s / 60) + "m ago";
+}
+
+async function override(state) {
+  try {
+    await fetch("/override", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, expiresIn: 1800 }),
+    });
+    poll();
+  } catch {}
+}
+
+poll();
+fetchHealth();
+setInterval(poll, 5000);
+setInterval(fetchHealth, 30000);
+</script>
+</body>
+</html>

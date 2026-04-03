@@ -1,0 +1,10 @@
+{
+  "server": "http://deskbuddy.local:3777",
+  "locations": {
+    "aa:bb:cc:11:22:33": { "id": "desk", "label": "At desk" },
+    "aa:bb:cc:44:55:66": { "id": "cubicle", "label": "Private cubicle" },
+    "aa:bb:cc:77:88:99": { "id": "roof", "label": "Rooftop" },
+    "aa:bb:cc:00:11:22": { "id": "office_floor_cubicle", "label": "Downstairs cubicle" }
+  },
+  "default": { "id": "unknown", "label": "Unknown" }
+}
