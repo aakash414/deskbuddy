@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <BH1750.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "config.h"
 
 class Sensors {
@@ -16,8 +18,7 @@ public:
         analogSetAttenuation(ADC_11db);
         pinMode(PIN_MOISTURE, INPUT);
 
-        // I2C for BH1750 on exposed pads
-        Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+        // I2C bus already started by initDisplay() (shared with FT3168 touch controller)
         if (lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, BH1750_ADDR, &Wire)) {
             lightReady = true;
             Serial.println("BH1750 initialized");
@@ -67,7 +68,7 @@ private:
                 success = true;
                 break;
             }
-            delay(10);
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
 
         if (!success) {

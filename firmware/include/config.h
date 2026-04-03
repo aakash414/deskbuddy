@@ -1,8 +1,8 @@
 #pragma once
 
 // WiFi — fill in before flashing
-#define WIFI_SSID "AUSA HEALTH"
-#define WIFI_PASSWORD "Prarlabs@ausa.26!"
+#define WIFI_SSID "HABITAT 002"
+#define WIFI_PASSWORD "002002002"
 
 // Server
 #define SERVER_HOST "deskbuddy.local"
@@ -24,9 +24,9 @@
 #define LCD_SDIO1 5
 #define LCD_SDIO2 6
 #define LCD_SDIO3 7
-#define LCD_SCLK  11
-#define LCD_CS    12
-#define LCD_WIDTH  368
+#define LCD_SCLK 11
+#define LCD_CS 12
+#define LCD_WIDTH 368
 #define LCD_HEIGHT 448
 
 // I2C bus (shared: BH1750 light sensor + FT3168 touch controller)
@@ -48,4 +48,13 @@
 
 // Sprite
 #define SPRITE_SIZE 48 // 48x48 base sprite
-#define SPRITE_SCALE 7 // Scaled to 336px on screen
+#define SPRITE_SCALE 6 // Scaled to 288px on screen (48*6)
+
+// AP mode (used when WiFi connection fails)
+#define WIFI_AP_SSID "DeskBuddy-Setup"
+#define WIFI_AP_PASSWORD "" // open network
+
+// FreeRTOS task stack sizes (bytes)
+#define STACK_DISPLAY 20480 // needs headroom for LittleFS file reads
+#define STACK_WIFI 16384    // WiFi init needs extra headroom
+#define STACK_CONFIG_UI 6144

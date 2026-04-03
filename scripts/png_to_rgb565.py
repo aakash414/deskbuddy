@@ -45,35 +45,69 @@ def convert_frame(img, x_offset, size):
     return pixels
 
 
-def generate_header(name, frames_data, sprite_size, frame_count):
+def generate_header(name, frames_data, sprite_size, frame_count, lvgl=False):
     """Generate C header file content."""
     lines = []
     lines.append(f"#pragma once")
     lines.append(f"")
-    lines.append(f"#include <Arduino.h>")
+    if lvgl:
+        lines.append(f"#include <lvgl.h>")
+    else:
+        lines.append(f"#include <Arduino.h>")
     lines.append(f"")
     lines.append(f"#define SPRITE_{name.upper()}_FRAMES {frame_count}")
     lines.append(f"#define SPRITE_{name.upper()}_SIZE {sprite_size}")
     lines.append(f"")
 
     for i, frame in enumerate(frames_data):
-        lines.append(f"static const uint16_t sprite_{name}_f{i}[] PROGMEM = {{")
+        if lvgl:
+            # LVGL needs uint8_t array (2 bytes per pixel, little-endian RGB565)
+            lines.append(f"static const uint8_t sprite_{name}_f{i}_data[] = {{")
+            # Flatten uint16_t → 2 bytes each (little-endian)
+            byte_pairs = []
+            for v in frame:
+                byte_pairs.append(v & 0xFF)
+                byte_pairs.append((v >> 8) & 0xFF)
+            for row_start in range(0, len(byte_pairs), 16):
+                chunk = byte_pairs[row_start:row_start + 16]
+                hex_vals = ", ".join(f"0x{v:02X}" for v in chunk)
+                comma = "," if row_start + 16 < len(byte_pairs) else ""
+                lines.append(f"    {hex_vals}{comma}")
+            lines.append(f"}};")
+            lines.append(f"")
+            lines.append(f"static const lv_img_dsc_t sprite_{name}_f{i} = {{")
+            lines.append(f"    .header = {{")
+            lines.append(f"        .cf = LV_IMG_CF_TRUE_COLOR,")
+            lines.append(f"        .always_zero = 0,")
+            lines.append(f"        .reserved = 0,")
+            lines.append(f"        .w = {sprite_size},")
+            lines.append(f"        .h = {sprite_size},")
+            lines.append(f"    }},")
+            lines.append(f"    .data_size = {sprite_size} * {sprite_size} * 2,")
+            lines.append(f"    .data = sprite_{name}_f{i}_data,")
+            lines.append(f"}};")
+            lines.append(f"")
+        else:
+            lines.append(f"static const uint16_t sprite_{name}_f{i}[] PROGMEM = {{")
+            for row_start in range(0, len(frame), 16):
+                chunk = frame[row_start:row_start + 16]
+                hex_vals = ", ".join(f"0x{v:04X}" for v in chunk)
+                comma = "," if row_start + 16 < len(frame) else ""
+                lines.append(f"    {hex_vals}{comma}")
+            lines.append(f"}};")
+            lines.append(f"")
 
-        # Write 16 values per line
-        for row_start in range(0, len(frame), 16):
-            chunk = frame[row_start:row_start + 16]
-            hex_vals = ", ".join(f"0x{v:04X}" for v in chunk)
-            comma = "," if row_start + 16 < len(frame) else ""
-            lines.append(f"    {hex_vals}{comma}")
-
+    if lvgl:
+        # Array of pointers to lv_img_dsc_t
+        lines.append(f"static const lv_img_dsc_t* const sprite_{name}[{frame_count}] = {{")
+        ptrs = ", ".join(f"&sprite_{name}_f{i}" for i in range(frame_count))
+        lines.append(f"    {ptrs}")
         lines.append(f"}};")
-        lines.append(f"")
-
-    # Frame pointer array
-    lines.append(f"static const uint16_t* const sprite_{name}[] PROGMEM = {{")
-    ptrs = ", ".join(f"sprite_{name}_f{i}" for i in range(frame_count))
-    lines.append(f"    {ptrs}")
-    lines.append(f"}};")
+    else:
+        lines.append(f"static const uint16_t* const sprite_{name}[] PROGMEM = {{")
+        ptrs = ", ".join(f"sprite_{name}_f{i}" for i in range(frame_count))
+        lines.append(f"    {ptrs}")
+        lines.append(f"}};")
     lines.append(f"")
 
     return "\n".join(lines)
@@ -84,8 +118,12 @@ def main():
     parser.add_argument("input", help="Input PNG file")
     parser.add_argument("--name", required=True, help="State name (e.g. happy, coding)")
     parser.add_argument("--frames", type=int, default=1, help="Number of frames in strip")
-    parser.add_argument("--size", type=int, default=48, help="Sprite size in pixels")
+    parser.add_argument("--size", type=int, default=300, help="Target sprite size in pixels (default: 300)")
+    parser.add_argument("--resize", action="store_true",
+                        help="Resize input to --size using LANCZOS (otherwise error if size mismatch)")
     parser.add_argument("--output", help="Output .h file (default: sprite_<name>.h)")
+    parser.add_argument("--lvgl", action="store_true",
+                        help="Output LVGL lv_img_dsc_t format instead of raw uint16_t")
     args = parser.parse_args()
 
     img = Image.open(args.input).convert("RGBA")
@@ -93,10 +131,14 @@ def main():
     expected_height = args.size
 
     if img.width != expected_width or img.height != expected_height:
-        print(f"Warning: expected {expected_width}x{expected_height}, got {img.width}x{img.height}")
-        if img.width < expected_width or img.height < expected_height:
-            print("Image too small, aborting")
-            sys.exit(1)
+        if args.resize:
+            img = img.resize((expected_width, expected_height), Image.LANCZOS)
+            print(f"  Resized to {expected_width}x{expected_height}")
+        else:
+            print(f"Warning: expected {expected_width}x{expected_height}, got {img.width}x{img.height}")
+            if img.width < expected_width or img.height < expected_height:
+                print("Image too small — use --resize to auto-scale")
+                sys.exit(1)
 
     frames = []
     for i in range(args.frames):
@@ -105,7 +147,7 @@ def main():
         frames.append(frame_data)
         print(f"  Frame {i}: {len(frame_data)} pixels ({len(frame_data) * 2} bytes)")
 
-    header = generate_header(args.name, frames, args.size, args.frames)
+    header = generate_header(args.name, frames, args.size, args.frames, lvgl=args.lvgl)
 
     out_path = args.output or f"sprite_{args.name}.h"
     with open(out_path, "w") as f:

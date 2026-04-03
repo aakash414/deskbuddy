@@ -8,5 +8,8 @@ dist/
 # PlatformIO
 .pio/
 
+# Generated sprite binaries (rebuilt from source PNGs via build_sprites_hd.py)
+data/sprites/*.bin
+
 # Firmware secrets (WiFi creds, API key)
 firmware/include/config.h
