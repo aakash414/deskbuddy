@@ -17,3 +17,4 @@
 #define LV_USE_IMG              1
 #define LV_USE_CANVAS           1
 #define LV_USE_ANIMIMG          1
+#define LV_USE_ANIMATION        1

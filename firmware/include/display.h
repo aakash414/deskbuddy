@@ -32,10 +32,6 @@ static const struct {
 class Display {
 public:
     void begin() {
-        // Note: actual LVGL init and display driver setup is board-specific
-        // The Waveshare board uses SH8601 AMOLED via QSPI
-        // Board SDK handles low-level init — we build our UI on top
-
         buildUI();
         Serial.println("Display UI built");
     }
@@ -59,7 +55,6 @@ public:
         if (data.moistureStatus == "dry" || data.moistureStatus == "soggy") {
             setGlow(lv_color_hex(0xE64E4E), 80);
         } else if (data.moistureStatus == "good") {
-            // Use state default glow
             applyStateStyle(data.state);
         }
     }
@@ -97,6 +92,12 @@ private:
     lv_obj_t* glowTop = nullptr;
     lv_obj_t* glowBottom = nullptr;
 
+    // Ghost sprite objects
+    lv_obj_t* ghostBody = nullptr;
+    lv_obj_t* eyeLeft = nullptr;
+    lv_obj_t* eyeRight = nullptr;
+    lv_obj_t* accentShape = nullptr;
+
     // State
     String currentState = "happy";
     String altTexts[2] = {"", ""};
@@ -110,15 +111,18 @@ private:
     uint8_t glowBaseOpacity = 40;
     float glowPhase = 0;
 
+    // Ghost bob animation state
+    uint16_t currentAnimSpeed = 300;
+
     void buildUI() {
         lv_obj_t* scr = lv_scr_act();
         lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
 
         // Edge glow bars (subtle colored strips on edges)
-        glowLeft = createGlowBar(scr, 0, 0, 4, SCREEN_HEIGHT);
-        glowRight = createGlowBar(scr, SCREEN_WIDTH - 4, 0, 4, SCREEN_HEIGHT);
-        glowTop = createGlowBar(scr, 0, 0, SCREEN_WIDTH, 4);
-        glowBottom = createGlowBar(scr, 0, SCREEN_HEIGHT - 4, SCREEN_WIDTH, 4);
+        glowLeft = createGlowBar(scr, 0, 0, 4, LCD_HEIGHT);
+        glowRight = createGlowBar(scr, LCD_WIDTH - 4, 0, 4, LCD_HEIGHT);
+        glowTop = createGlowBar(scr, 0, 0, LCD_WIDTH, 4);
+        glowBottom = createGlowBar(scr, 0, LCD_HEIGHT - 4, LCD_WIDTH, 4);
 
         // Sprite container (centered, takes most of screen)
         spriteArea = lv_obj_create(scr);
@@ -127,6 +131,9 @@ private:
         lv_obj_set_style_bg_opa(spriteArea, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(spriteArea, 0, 0);
         lv_obj_set_style_pad_all(spriteArea, 0, 0);
+        lv_obj_set_style_clip_corner(spriteArea, false, 0);
+
+        buildGhost(spriteArea);
 
         // Bottom text label (alternates every 5s)
         labelBottom = lv_label_create(scr);
@@ -134,8 +141,70 @@ private:
         lv_obj_set_style_text_color(labelBottom, lv_color_hex(0x8A9A8E), 0);
         lv_obj_set_style_text_font(labelBottom, &lv_font_montserrat_20, 0);
         lv_obj_set_style_text_align(labelBottom, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_width(labelBottom, SCREEN_WIDTH - 40);
+        lv_obj_set_width(labelBottom, LCD_WIDTH - 40);
         lv_obj_align(labelBottom, LV_ALIGN_BOTTOM_MID, 0, -24);
+    }
+
+    void buildGhost(lv_obj_t* parent) {
+        // Ghost body: 180×220, top-rounded pill, centered in spriteArea
+        ghostBody = lv_obj_create(parent);
+        lv_obj_set_size(ghostBody, 180, 220);
+        lv_obj_align(ghostBody, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_style_bg_color(ghostBody, lv_color_hex(0x4ECB71), 0);
+        lv_obj_set_style_radius(ghostBody, 90, 0);
+        lv_obj_set_style_border_width(ghostBody, 0, 0);
+        lv_obj_set_style_pad_all(ghostBody, 0, 0);
+        lv_obj_clear_flag(ghostBody, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Eyes: white circles, positioned in upper half of body
+        eyeLeft = lv_obj_create(ghostBody);
+        lv_obj_set_size(eyeLeft, 28, 28);
+        lv_obj_set_pos(eyeLeft, 35, 60);
+        lv_obj_set_style_bg_color(eyeLeft, lv_color_white(), 0);
+        lv_obj_set_style_radius(eyeLeft, 14, 0);
+        lv_obj_set_style_border_width(eyeLeft, 0, 0);
+        lv_obj_clear_flag(eyeLeft, LV_OBJ_FLAG_SCROLLABLE);
+
+        eyeRight = lv_obj_create(ghostBody);
+        lv_obj_set_size(eyeRight, 28, 28);
+        lv_obj_set_pos(eyeRight, 117, 60);
+        lv_obj_set_style_bg_color(eyeRight, lv_color_white(), 0);
+        lv_obj_set_style_radius(eyeRight, 14, 0);
+        lv_obj_set_style_border_width(eyeRight, 0, 0);
+        lv_obj_clear_flag(eyeRight, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Accent shape: small 36×36 circle at bottom-center, hidden by default
+        accentShape = lv_obj_create(ghostBody);
+        lv_obj_set_size(accentShape, 36, 36);
+        lv_obj_align(accentShape, LV_ALIGN_BOTTOM_MID, 0, -20);
+        lv_obj_set_style_bg_color(accentShape, lv_color_hex(0xE6719A), 0);
+        lv_obj_set_style_radius(accentShape, 18, 0);
+        lv_obj_set_style_border_width(accentShape, 0, 0);
+        lv_obj_add_flag(accentShape, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(accentShape, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Start bob animation
+        startBobAnimation(300);
+    }
+
+    static void bobAnimCallback(void* obj, int32_t v) {
+        lv_obj_set_y((lv_obj_t*)obj, v);
+    }
+
+    void startBobAnimation(uint16_t periodMs) {
+        if (!ghostBody) return;
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, ghostBody);
+        lv_anim_set_exec_cb(&a, bobAnimCallback);
+        // Center Y for ghostBody inside 336px container: (336-220)/2 = 58
+        lv_anim_set_values(&a, 50, 66);  // bob 8px above/below center
+        lv_anim_set_time(&a, periodMs * 4);
+        lv_anim_set_playback_time(&a, periodMs * 4);
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+        lv_anim_start(&a);
+        currentAnimSpeed = periodMs;
     }
 
     lv_obj_t* createGlowBar(lv_obj_t* parent, int x, int y, int w, int h) {
@@ -177,10 +246,50 @@ private:
         for (const auto& s : STATE_STYLES) {
             if (state == s.name) {
                 setGlow(s.style.glowColor, s.style.glowOpacity);
+                applyGhostStyle(state, s.style);
                 return;
             }
         }
-        // Default
         setGlow(lv_color_hex(0x4ECB71), 40);
+        applyGhostStyle("happy", STATE_STYLES[0].style);
+    }
+
+    void applyGhostStyle(const String& state, const StateStyle& style) {
+        if (!ghostBody) return;
+
+        // Body color and opacity
+        lv_obj_set_style_bg_color(ghostBody, style.bodyColor, 0);
+        lv_obj_set_style_bg_opa(ghostBody, LV_OPA_COVER, 0);
+
+        // Eye visibility
+        bool showEyes = (state != "sleeping");
+        if (eyeLeft)  { showEyes ? lv_obj_clear_flag(eyeLeft, LV_OBJ_FLAG_HIDDEN)  : lv_obj_add_flag(eyeLeft, LV_OBJ_FLAG_HIDDEN); }
+        if (eyeRight) { showEyes ? lv_obj_clear_flag(eyeRight, LV_OBJ_FLAG_HIDDEN) : lv_obj_add_flag(eyeRight, LV_OBJ_FLAG_HIDDEN); }
+
+        // Accent shape per state
+        if (accentShape) {
+            lv_obj_add_flag(accentShape, LV_OBJ_FLAG_HIDDEN);  // hide by default
+
+            if (state == "thirsty") {
+                lv_obj_set_style_bg_color(accentShape, lv_color_hex(0xE64E4E), 0);
+                lv_obj_clear_flag(accentShape, LV_OBJ_FLAG_HIDDEN);
+            } else if (state == "loved") {
+                lv_obj_set_style_bg_color(accentShape, lv_color_hex(0xE6719A), 0);
+                lv_obj_clear_flag(accentShape, LV_OBJ_FLAG_HIDDEN);
+            } else if (state == "overwatered") {
+                lv_obj_set_style_bg_color(accentShape, lv_color_hex(0x8ABCE6), 0);
+                lv_obj_clear_flag(accentShape, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+
+        // Sleeping: dim the whole ghost
+        if (state == "sleeping") {
+            lv_obj_set_style_bg_opa(ghostBody, 120, 0);
+        }
+
+        // Restart bob at new speed if changed
+        if (style.animSpeed != currentAnimSpeed) {
+            startBobAnimation(style.animSpeed);
+        }
     }
 };

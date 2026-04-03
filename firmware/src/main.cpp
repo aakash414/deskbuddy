@@ -1,115 +1,200 @@
 #include <Arduino.h>
+#include <Wire.h>
 #include <lvgl.h>
-#include "Waveshare_AMOLED.h"
+#include <Arduino_GFX.h>
+#include <databus/Arduino_ESP32QSPI.h>
+#include <display/Arduino_SH8601.h>
+#include <Adafruit_XCA9554.h>
 #include "config.h"
 #include "sensors.h"
 #include "network.h"
 #include "display.h"
 
-// Waveshare board instance
-static AMOLED_1_8 amoled;
+// ── Hardware objects ─────────────────────────────────────────────────────────
 
-// LVGL draw buffer — two 1/10-screen buffers in PSRAM
-static lv_color_t* lvBuf1;
-static lv_color_t* lvBuf2;
+// SH8601 AMOLED via QSPI
+static Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+    LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
+static Arduino_SH8601 *gfx = new Arduino_SH8601(
+    bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, LCD_WIDTH, LCD_HEIGHT);
 
+// XCA9554 GPIO expander — controls display power/reset lines
+static Adafruit_XCA9554 expander;
+
+// LVGL draw buffer
+static lv_disp_draw_buf_t draw_buf;
+
+// App objects
 Sensors sensors;
-Network network;
+ServerLink network;
 Display display;
 
 unsigned long lastSensorRead = 0;
 unsigned long lastStatusFetch = 0;
 StatusData lastStatus;
 
-// ── LVGL display flush callback ──────────────────────────────────────────────
-void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
-    uint16_t w = area->x2 - area->x1 + 1;
-    uint16_t h = area->y2 - area->y1 + 1;
-    amoled.pushColors(area->x1, area->y1, w, h, (uint16_t*)px_map);
-    lv_display_flush_ready(disp);
+// ── FT3168 touch (direct I2C) ────────────────────────────────────────────────
+// FT3168 registers
+#define FT3168_ADDR     0x38
+#define FT3168_TD_STATUS 0x02  // number of touch points
+#define FT3168_TOUCH1_XH 0x03  // X high byte (bits 3:0 = X[11:8])
+#define FT3168_TOUCH1_XL 0x04  // X low byte
+#define FT3168_TOUCH1_YH 0x05  // Y high byte (bits 3:0 = Y[11:8])
+#define FT3168_TOUCH1_YL 0x06  // Y low byte
+
+static volatile bool touchFlag = false;
+
+void IRAM_ATTR touchISR() {
+    touchFlag = true;
 }
 
-// ── LVGL touch read callback ─────────────────────────────────────────────────
-void lvgl_touch_cb(lv_indev_t* indev, lv_indev_data_t* data) {
-    int16_t x = 0, y = 0;
-    if (amoled.getTouch(&x, &y)) {
-        data->point.x = x;
-        data->point.y = y;
-        data->state = LV_INDEV_STATE_PRESSED;
-        sensors.setTouched(true);
-    } else {
-        data->state = LV_INDEV_STATE_RELEASED;
-        sensors.setTouched(false);
+static bool ft3168_read(int16_t *x, int16_t *y) {
+    Wire.beginTransmission(FT3168_ADDR);
+    Wire.write(FT3168_TD_STATUS);
+    if (Wire.endTransmission(false) != 0) return false;
+    Wire.requestFrom((uint8_t)FT3168_ADDR, (uint8_t)5);
+    if (Wire.available() < 5) return false;
+
+    uint8_t count  = Wire.read() & 0x0F;
+    uint8_t xh     = Wire.read();
+    uint8_t xl     = Wire.read();
+    uint8_t yh     = Wire.read();
+    uint8_t yl     = Wire.read();
+
+    if (count == 0) return false;
+
+    *x = (int16_t)(((xh & 0x0F) << 8) | xl);
+    *y = (int16_t)(((yh & 0x0F) << 8) | yl);
+    return true;
+}
+
+// ── LVGL callbacks ───────────────────────────────────────────────────────────
+
+void lvgl_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+    uint32_t w = area->x2 - area->x1 + 1;
+    uint32_t h = area->y2 - area->y1 + 1;
+    gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)&color_p->full, w, h);
+    lv_disp_flush_ready(disp);
+}
+
+void lvgl_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
+    static int16_t lastX = 0, lastY = 0;
+
+    if (touchFlag) {
+        touchFlag = false;
+        int16_t x, y;
+        if (ft3168_read(&x, &y)) {
+            lastX = x;
+            lastY = y;
+            data->state = LV_INDEV_STATE_PR;
+            data->point.x = x;
+            data->point.y = y;
+            sensors.setTouched(true);
+            return;
+        }
     }
+    data->state = LV_INDEV_STATE_REL;
+    data->point.x = lastX;
+    data->point.y = lastY;
+    sensors.setTouched(false);
 }
 
-// ── Display driver init ──────────────────────────────────────────────────────
-void initDisplay() {
-    // Init board hardware (SH8601 AMOLED + FT3168 touch + AXP2101 PMIC)
-    amoled.begin();
+// ── Display init ─────────────────────────────────────────────────────────────
 
-    // Allocate LVGL draw buffers in PSRAM
-    size_t bufSize = SCREEN_WIDTH * (SCREEN_HEIGHT / 10) * sizeof(lv_color_t);
-    lvBuf1 = (lv_color_t*)ps_malloc(bufSize);
-    lvBuf2 = (lv_color_t*)ps_malloc(bufSize);
-    if (!lvBuf1 || !lvBuf2) {
-        Serial.println("FATAL: LVGL buffer alloc failed — no PSRAM?");
+void initDisplay() {
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+
+    // GPIO expander: drives display power/reset lines — must init before display
+    if (!expander.begin(0x20)) {
+        Serial.println("WARN: XCA9554 expander not found");
+    } else {
+        expander.pinMode(0, OUTPUT);
+        expander.pinMode(1, OUTPUT);
+        expander.pinMode(2, OUTPUT);
+        expander.pinMode(6, OUTPUT);
+        expander.digitalWrite(0, LOW);
+        expander.digitalWrite(1, LOW);
+        expander.digitalWrite(2, LOW);
+        expander.digitalWrite(6, LOW);
+        delay(20);
+        expander.digitalWrite(0, HIGH);
+        expander.digitalWrite(1, HIGH);
+        expander.digitalWrite(2, HIGH);
+        expander.digitalWrite(6, HIGH);
+        Serial.println("XCA9554 initialized");
+    }
+
+    // Touch interrupt pin
+    pinMode(PIN_TOUCH_INT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_TOUCH_INT), touchISR, FALLING);
+
+    // Display hardware
+    gfx->begin();
+    gfx->setBrightness(200);
+    Serial.printf("Display: %dx%d\n", gfx->width(), gfx->height());
+
+    // Quick hardware test — red screen for 1s to confirm display is alive
+    gfx->fillScreen(0xF800);
+    delay(1000);
+    gfx->fillScreen(0x0000);
+
+    // LVGL draw buffers — DMA-capable, 1/4 screen each
+    size_t bufPixels = LCD_WIDTH * LCD_HEIGHT / 4;
+    lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(bufPixels * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(bufPixels * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    if (!buf1 || !buf2) {
+        Serial.println("FATAL: LVGL buffer alloc failed");
         while (true) delay(1000);
     }
+    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, bufPixels);
 
-    // Register display with LVGL
-    lv_display_t* disp = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
-    lv_display_set_flush_cb(disp, lvgl_flush_cb);
-    lv_display_set_draw_buffers(disp, lvBuf1, lvBuf2, bufSize, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    static lv_disp_drv_t disp_drv;
+    lv_disp_drv_init(&disp_drv);
+    disp_drv.hor_res  = LCD_WIDTH;
+    disp_drv.ver_res  = LCD_HEIGHT;
+    disp_drv.flush_cb = lvgl_flush_cb;
+    disp_drv.draw_buf = &draw_buf;
+    lv_disp_drv_register(&disp_drv);
 
-    // Register touch input
-    lv_indev_t* touch = lv_indev_create();
-    lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(touch, lvgl_touch_cb);
+    static lv_indev_drv_t indev_drv;
+    lv_indev_drv_init(&indev_drv);
+    indev_drv.type    = LV_INDEV_TYPE_POINTER;
+    indev_drv.read_cb = lvgl_touch_cb;
+    lv_indev_drv_register(&indev_drv);
 
     Serial.println("Display driver initialized");
 }
 
+// ── Arduino entry points ─────────────────────────────────────────────────────
+
 void setup() {
     Serial.begin(115200);
-    delay(500);
+    delay(3000);  // wait for USB CDC to reconnect after reset
     Serial.println("\n=== DeskBuddy v1.0 ===");
 
     lv_init();
     initDisplay();
-
-    // Build our UI on top of LVGL
     display.begin();
-
-    // Initialize sensors
     sensors.begin();
-
-    // Connect to WiFi and resolve server
     network.begin();
 
     Serial.println("Setup complete\n");
 }
 
 void loop() {
-    // LVGL tick
     lv_timer_handler();
 
-    // Read sensors every 10s
     if (millis() - lastSensorRead > SENSOR_INTERVAL) {
         sensors.read();
         lastSensorRead = millis();
-
         Serial.printf("Sensors: moisture=%.0f%% light=%.0f lux touched=%d\n",
             sensors.moisture, sensors.light, sensors.isTouchActive());
-
         network.postSensors(sensors.moisture, sensors.light, sensors.isTouchActive());
     }
 
-    // Fetch status every 30s
     if (millis() - lastStatusFetch > STATUS_INTERVAL) {
         StatusData data = network.fetchStatus();
         lastStatusFetch = millis();
-
         if (data.valid) {
             lastStatus = data;
             display.update(data);
@@ -118,15 +203,11 @@ void loop() {
         }
     }
 
-    // Handle offline state
     if (network.isOffline()) {
         display.showOffline();
     }
 
-    // WiFi maintenance
     network.maintain();
-
-    // Display animation tick
     display.tick();
 
     delay(5);

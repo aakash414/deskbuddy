@@ -6,4 +6,7 @@ logs/
 dist/
 
 # PlatformIO
-firmware/.pio/
+.pio/
+
+# Firmware secrets (WiFi creds, API key)
+firmware/include/config.h

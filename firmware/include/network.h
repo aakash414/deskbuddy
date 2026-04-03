@@ -19,7 +19,7 @@ struct StatusData {
     bool valid;
 };
 
-class Network {
+class ServerLink {
 public:
     bool connected = false;
     String serverUrl;
@@ -47,8 +47,15 @@ public:
     }
 
     void maintain() {
-        if (WiFi.status() != WL_CONNECTED) {
-            connected = false;
+        if (WiFi.status() == WL_CONNECTED) {
+            if (!connected) {
+                connected = true;
+                reconnectDelay = 1000;
+                Serial.println("WiFi connected!");
+                resolveServer();
+            }
+        } else {
+            if (connected) connected = false;
             reconnect();
         }
     }
@@ -157,21 +164,18 @@ private:
 
     void reconnect() {
         if (millis() - lastReconnect < reconnectDelay) return;
+        lastReconnect = millis();
+
+        wl_status_t status = WiFi.status();
+        if (status == WL_CONNECTED) return;  // maintain() handles this
+        if (status == WL_IDLE_STATUS) return; // already attempting, don't interrupt
 
         Serial.println("WiFi reconnecting...");
-        WiFi.disconnect();
+        WiFi.mode(WIFI_STA);
+        delay(100);
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        lastReconnect = millis();
 
         // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
         reconnectDelay = min(reconnectDelay * 2, 30000);
-
-        delay(3000);
-        if (WiFi.status() == WL_CONNECTED) {
-            connected = true;
-            reconnectDelay = 1000;
-            Serial.println("Reconnected!");
-            resolveServer();
-        }
     }
 };
