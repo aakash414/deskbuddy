@@ -67,6 +67,7 @@ public:
 
         HTTPClient http;
         http.begin(serverUrl + "/status");
+        http.addHeader("x-api-key", API_KEY);
         http.setTimeout(10000);
         int code = http.GET();
 
@@ -113,6 +114,7 @@ public:
         HTTPClient http;
         http.begin(serverUrl + "/sensors");
         http.addHeader("Content-Type", "application/json");
+        http.addHeader("x-api-key", API_KEY);
         http.setTimeout(5000);
 
         JsonDocument doc;

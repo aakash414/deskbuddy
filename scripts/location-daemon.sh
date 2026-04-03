@@ -47,9 +47,12 @@ if [ -z "$LOCATION" ]; then
   LOCATION="unknown"
 fi
 
+API_KEY=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('apiKey', ''))" 2>/dev/null)
+
 RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
   -X POST "$SERVER/location" \
   -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
   -d "{\"location\": \"$LOCATION\", \"bssid\": \"$BSSID\"}" \
   --connect-timeout 5 \
   --max-time 10)

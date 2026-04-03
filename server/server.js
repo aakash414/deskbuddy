@@ -17,6 +17,15 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3777;
+const API_KEY = process.env.API_KEY;
+
+function requireApiKey(req, res, next) {
+  if (!API_KEY) return next();
+  if (req.headers["x-api-key"] !== API_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  next();
+}
 
 // GET /status — ESP32 polls this every 30s
 app.get("/status", (req, res) => {
@@ -25,21 +34,21 @@ app.get("/status", (req, res) => {
 });
 
 // POST /sensors — ESP32 pushes every 10s
-app.post("/sensors", (req, res) => {
+app.post("/sensors", requireApiKey, (req, res) => {
   const { moisture, light, touched } = req.body;
   sensorStore.update({ moisture, light, touched });
   res.json({ ok: true });
 });
 
 // POST /location — MacBook daemon pushes every 30s
-app.post("/location", (req, res) => {
+app.post("/location", requireApiKey, (req, res) => {
   const { location, bssid } = req.body;
   locationStore.update(location, bssid);
   res.json({ ok: true, label: locationStore.getLabel() });
 });
 
 // POST /override — manual state force from dashboard
-app.post("/override", (req, res) => {
+app.post("/override", requireApiKey, (req, res) => {
   const { state, expiresIn } = req.body;
   const expiresAt = overrideStore.set(
     state,

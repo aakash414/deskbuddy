@@ -9,6 +9,8 @@
 #define SERVER_PORT   3777
 // Fallback IP if mDNS fails — set this to your Mac Mini's IP
 #define SERVER_IP     "192.168.1.100"
+// API key — must match API_KEY in server .env
+#define API_KEY       "your_generated_key_here"
 
 // Timing (ms)
 #define SENSOR_INTERVAL    10000   // Read sensors every 10s

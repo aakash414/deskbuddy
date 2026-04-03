@@ -1,6 +1,6 @@
 # DeskBuddy
 
-A desk companion that shows your plant's health and your work presence. A pixel-art plant-ghost mascot on a 1.8" AMOLED screen reacts to soil moisture, ambient light, your office location, Jira tasks, and Google Calendar meetings. Teammates glance at it to see where you are — without interrupting on Slack.
+A desk companion that shows your plant's health and your work presence. A pixel-art plant-ghost mascot on a 1.8" AMOLED screen reacts to soil moisture, ambient light, your office location, Jira tasks, and Google Calendar meetings. Teammates glance at it to see where you are — without interrupting on Teams.
 
 ## Architecture
 
