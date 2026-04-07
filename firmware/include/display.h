@@ -95,32 +95,32 @@ public:
         if (labelBottom) lv_label_set_text(labelBottom, altTexts[0].c_str());
     }
 
-    // Touch: cycle rooftop → loved → sleeping
+    // Touch: cycle through demo states
     void nextState() {
-        static const char* cycle[] = {"rooftop", "loved", "sleeping"};
+        static const char* cycle[] = {"rooftop", "loved", "meeting", "focus", "sleeping"};
         static int idx = 0;
         lastTouchMs = millis();
         currentState = cycle[idx];
-        idx = (idx + 1) % 3;
+        idx = (idx + 1) % 5;
         applyState(currentState);
         altTexts[0] = currentState;
         altTextCount = 1;
         if (labelBottom) lv_label_set_text(labelBottom, currentState.c_str());
     }
 
-    bool inDemoMode() { return millis() - lastTouchMs < 30000; }
+    bool inDemoMode() { return lastTouchMs > 0 && millis() - lastTouchMs < DEMO_TOUCH_DURATION_MS; }
 
     void tick() {
-        // Alternate bottom text every 5 s
-        if (altTextCount > 1 && millis() - lastTextSwap > 5000) {
+        // Alternate bottom text every TEXT_SWAP_MS
+        if (altTextCount > 1 && millis() - lastTextSwap > TEXT_SWAP_MS) {
             currentTextIdx = (currentTextIdx + 1) % altTextCount;
             if (labelBottom)
                 lv_label_set_text(labelBottom, altTexts[currentTextIdx].c_str());
             lastTextSwap = millis();
         }
 
-        // Advance animation frame every 200 ms
-        if (framesLoaded && millis() - lastFrameTick > 200) {
+        // Advance animation frame every FRAME_TICK_MS
+        if (framesLoaded && millis() - lastFrameTick > FRAME_TICK_MS) {
             currentFrame = (currentFrame + 1) % FRAME_COUNT;
             if (ghostImg && frameDescs[currentFrame].data)
                 lv_img_set_src(ghostImg, &frameDescs[currentFrame]);
@@ -128,7 +128,7 @@ public:
         }
 
         // Pulse edge glow
-        if (millis() - lastGlowTick > 50) {
+        if (millis() - lastGlowTick > GLOW_TICK_MS) {
             animateGlow();
             lastGlowTick = millis();
         }

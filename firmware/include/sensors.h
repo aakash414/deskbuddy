@@ -42,11 +42,10 @@ public:
     }
 
     bool isTouchActive() {
-        // Touch stays active for TOUCH_HOLD seconds after release
+        // Touch stays active for SENSOR_TOUCH_HOLD_MS after release
         if (touched) return true;
         if (lastTouchTime > 0) {
-            uint32_t holdMs = 10000; // 10s hold
-            return (millis() - lastTouchTime) < holdMs;
+            return (millis() - lastTouchTime) < SENSOR_TOUCH_HOLD_MS;
         }
         return false;
     }

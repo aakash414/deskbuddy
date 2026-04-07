@@ -77,6 +77,41 @@ public:
     String getServerUrl() { return _serverUrl; }
     String getApiKey()    { return _apiKey; }
 
+    // Attempt to reconnect to the STA network. Returns true on success.
+    // Call periodically from the WiFi task when in AP mode.
+    bool tryReconnect() {
+        if (gWifiConnected) return true;
+        if (_ssid.isEmpty()) return false;
+
+        Serial.printf("[WiFi] Attempting STA reconnect to '%s'\n", _ssid.c_str());
+        WiFi.disconnect(true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(_ssid.c_str(), _password.c_str());
+
+        for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; i++) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[WiFi] Reconnect failed, remaining in AP mode");
+            WiFi.mode(WIFI_AP);
+            WiFi.softAP(WIFI_AP_SSID);
+            return false;
+        }
+
+        esp_wifi_set_ps(WIFI_PS_NONE);
+        lockState();
+        gWifiConnected = true;
+        gApMode = false;
+        gDeviceIP = WiFi.localIP().toString();
+        unlockState();
+        _serverUrl = "http://" + _serverIp + ":" + String(_port);
+        Serial.printf("[WiFi] Reconnected! IP: %s  Server: %s\n",
+                      WiFi.localIP().toString().c_str(), _serverUrl.c_str());
+        return true;
+    }
+
 private:
     WebServer _server{80};
     bool      _pendingRestart = false;

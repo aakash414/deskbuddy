@@ -47,6 +47,12 @@ async function fetchCurrentTask() {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
+          if (res.statusCode !== 200) {
+            console.error(`[jira] API returned HTTP ${res.statusCode}`);
+            state.connected = false;
+            resolve();
+            return;
+          }
           try {
             const json = JSON.parse(data);
             processResult(json);
@@ -90,12 +96,15 @@ const jiraPoller = {
       return;
     }
     console.log("Jira: polling every 60s");
-    fetchCurrentTask();
-    pollInterval = setInterval(fetchCurrentTask, 60000);
+    const poll = async () => {
+      await fetchCurrentTask();
+      pollInterval = setTimeout(poll, 60000);
+    };
+    poll();
   },
 
   stop() {
-    if (pollInterval) clearInterval(pollInterval);
+    if (pollInterval) clearTimeout(pollInterval);
   },
 
   get() {

@@ -5,14 +5,27 @@
 <dict>
   <key>Label</key>
   <string>com.deskbuddy.location</string>
+  <!-- bash -c lets the shell expand $HOME so no hardcoded user path is needed -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/aakash/deskbuddy/location-daemon.sh</string>
+    <string>-c</string>
+    <string>exec "$HOME/deskbuddy/location-daemon.sh"</string>
   </array>
   <key>StartInterval</key>
   <integer>30</integer>
   <key>RunAtLoad</key>
   <true/>
+  <!-- Restart the daemon if it exits with a non-zero status (crash recovery) -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <!-- Capture stdout/stderr for debugging; the script also writes to its own log -->
+  <key>StandardOutPath</key>
+  <string>/tmp/com.deskbuddy.location.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/com.deskbuddy.location.err</string>
 </dict>
 </plist>

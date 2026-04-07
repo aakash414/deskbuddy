@@ -16,7 +16,7 @@ const sensorStore = {
   },
 
   get() {
-    const touchHold = Number(process.env.TOUCH_HOLD) || 10;
+    const touchHold = process.env.TOUCH_HOLD !== undefined ? Number(process.env.TOUCH_HOLD) : 10;
     const touchActive =
       state.touchedAt &&
       Date.now() - new Date(state.touchedAt).getTime() < touchHold * 1000;
@@ -37,8 +37,8 @@ const sensorStore = {
 
 function getMoistureStatus(val) {
   if (val === null) return "unknown";
-  const dry = Number(process.env.MOISTURE_DRY) || 20;
-  const soggy = Number(process.env.MOISTURE_SOGGY) || 90;
+  const dry   = process.env.MOISTURE_DRY   !== undefined ? Number(process.env.MOISTURE_DRY)   : 20;
+  const soggy = process.env.MOISTURE_SOGGY !== undefined ? Number(process.env.MOISTURE_SOGGY) : 90;
   if (val < dry) return "dry";
   if (val > soggy) return "soggy";
   return "good";
@@ -46,7 +46,7 @@ function getMoistureStatus(val) {
 
 function getLightStatus(val) {
   if (val === null) return "unknown";
-  const dark = Number(process.env.LIGHT_DARK) || 50;
+  const dark = process.env.LIGHT_DARK !== undefined ? Number(process.env.LIGHT_DARK) : 50;
   if (val < dark) return "dark";
   return "bright";
 }

@@ -65,7 +65,13 @@ async function refreshAccessToken() {
 
 async function getToken() {
   if (accessToken && Date.now() < tokenExpiresAt) return accessToken;
-  return refreshAccessToken();
+  const newToken = await refreshAccessToken();
+  if (!newToken) {
+    // Clear stale token so the next call doesn't reuse it
+    accessToken = null;
+    tokenExpiresAt = 0;
+  }
+  return newToken;
 }
 
 async function fetchEvents() {
@@ -100,6 +106,12 @@ async function fetchEvents() {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
+          if (res.statusCode !== 200) {
+            console.error(`[calendar] API returned HTTP ${res.statusCode}`);
+            state.connected = false;
+            resolve();
+            return;
+          }
           try {
             const json = JSON.parse(data);
             processEvents(json.items || []);
@@ -152,12 +164,15 @@ const calendarPoller = {
       return;
     }
     console.log("Calendar: polling every 60s");
-    fetchEvents();
-    pollInterval = setInterval(fetchEvents, 60000);
+    const poll = async () => {
+      await fetchEvents();
+      pollInterval = setTimeout(poll, 60000);
+    };
+    poll();
   },
 
   stop() {
-    if (pollInterval) clearInterval(pollInterval);
+    if (pollInterval) clearTimeout(pollInterval);
   },
 
   get() {

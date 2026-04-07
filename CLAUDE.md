@@ -30,10 +30,10 @@ server/              Node.js + Express API server (runs on Mac Mini)
 
 firmware/            ESP32 PlatformIO project
   platformio.ini     Targets Waveshare ESP32-S3-Touch-AMOLED-1.8
-  src/main.cpp       Main loop: 10s sensor read, 30s status fetch, LVGL tick
-  include/
-    config.h         WiFi creds, pins, timing, calibration constants
-    sensors.h        ADC2 moisture (GPIO17, retry logic), BH1750 I2C light
+    src/main.cpp       Main loop: 10s sensor read, 30s status fetch, LVGL tick
+    include/
+      config.h         WiFi creds, pins, timing, calibration constants
+      sensors.h        ADC2 moisture (GPIO17, retry logic), BH1750 I2C light
     network.h        WiFi + mDNS + HTTP client with reconnect backoff
     display.h        LVGL UI: sprite area, alternating text, pulsing edge glow
     lv_conf.h        LVGL config

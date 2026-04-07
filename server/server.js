@@ -3,7 +3,7 @@ const cors = require("cors");
 const { resolve } = require("path");
 
 const { loadEnv } = require("./lib/env");
-const { stateEngine } = require("./lib/state-engine");
+const { stateEngine, STATES } = require("./lib/state-engine");
 const { sensorStore } = require("./lib/stores/sensors");
 const { locationStore } = require("./lib/stores/location");
 const { overrideStore } = require("./lib/stores/override");
@@ -33,16 +33,27 @@ app.get("/status", (req, res) => {
   res.json(state);
 });
 
+const VALID_STATES = Object.keys(STATES);
+
 // POST /sensors — ESP32 pushes every 10s
 app.post("/sensors", requireApiKey, (req, res) => {
   const { moisture, light, touched } = req.body;
-  sensorStore.update({ moisture, light, touched });
+  if (moisture !== undefined && (typeof moisture !== "number" || moisture < 0 || moisture > 100)) {
+    return res.status(400).json({ error: "moisture must be a number between 0 and 100" });
+  }
+  if (light !== undefined && (typeof light !== "number" || light < 0)) {
+    return res.status(400).json({ error: "light must be a non-negative number" });
+  }
+  sensorStore.update({ moisture, light, touched: touched !== undefined ? !!touched : undefined });
   res.json({ ok: true });
 });
 
 // POST /location — MacBook daemon pushes every 30s
 app.post("/location", requireApiKey, (req, res) => {
   const { location, bssid } = req.body;
+  if (location !== undefined && typeof location !== "string") {
+    return res.status(400).json({ error: "location must be a string" });
+  }
   locationStore.update(location, bssid);
   res.json({ ok: true, label: locationStore.getLabel() });
 });
@@ -50,6 +61,12 @@ app.post("/location", requireApiKey, (req, res) => {
 // POST /override — manual state force from dashboard
 app.post("/override", requireApiKey, (req, res) => {
   const { state, expiresIn } = req.body;
+  if (!state || !VALID_STATES.includes(state)) {
+    return res.status(400).json({ error: `state must be one of: ${VALID_STATES.join(", ")}` });
+  }
+  if (expiresIn !== undefined && (typeof expiresIn !== "number" || expiresIn <= 0)) {
+    return res.status(400).json({ error: "expiresIn must be a positive number" });
+  }
   const expiresAt = overrideStore.set(
     state,
     expiresIn || Number(process.env.OVERRIDE_DEFAULT_EXPIRY) || 1800
@@ -80,3 +97,11 @@ app.listen(PORT, () => {
   calendarPoller.start();
   jiraPoller.start();
 });
+
+function shutdown() {
+  calendarPoller.stop();
+  jiraPoller.stop();
+  process.exit(0);
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

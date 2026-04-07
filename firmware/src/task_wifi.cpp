@@ -15,9 +15,18 @@ void taskWifi(void* param) {
     TickType_t lastSensor = 0;
     TickType_t lastStatus = 0;
 
+    static TickType_t lastReconnect = 0;
+
     for (;;) {
-        // In AP mode nothing to do — config UI task handles the web server
+        // In AP mode: periodically try to reconnect to the STA network
         if (gApMode) {
+            TickType_t now = xTaskGetTickCount();
+            if ((now - lastReconnect) >= pdMS_TO_TICKS(60000)) {
+                if (wifiManager.tryReconnect()) {
+                    network.begin(wifiManager.getServerUrl(), wifiManager.getApiKey());
+                }
+                lastReconnect = now;
+            }
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }

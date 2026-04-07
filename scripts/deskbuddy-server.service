@@ -1,0 +1,14 @@
+[Unit]
+Description=DeskBuddy Server
+After=network.target
+
+[Service]
+Type=simple
+User=aakash
+WorkingDirectory=/home/aakash/deskbuddy/server
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+EnvironmentFile=/home/aakash/deskbuddy/server/.env
+
+[Install]
+WantedBy=multi-user.target

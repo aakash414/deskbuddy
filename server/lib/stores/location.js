@@ -36,7 +36,7 @@ const locationStore = {
   isAway() {
     if (!state.updatedAt) return true;
     const timeout =
-      (Number(process.env.LOCATION_TIMEOUT) || 300) * 1000;
+      (process.env.LOCATION_TIMEOUT !== undefined ? Number(process.env.LOCATION_TIMEOUT) : 300) * 1000;
     return Date.now() - new Date(state.updatedAt).getTime() > timeout;
   },
 

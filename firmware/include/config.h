@@ -18,6 +18,13 @@
 #define FRAME_INTERVAL_DEFAULT 300 // Animation frame rate
 #define OFFLINE_TIMEOUT 300000     // 5 min without server = offline
 
+// Display timing (ms)
+#define SENSOR_TOUCH_HOLD_MS 10000 // Touch holds "loved" state for 10s
+#define DEMO_TOUCH_DURATION_MS 30000 // Demo cycle stays active for 30s after touch
+#define TEXT_SWAP_MS 5000          // Bottom text alternation interval
+#define FRAME_TICK_MS 200          // Animation frame advance interval
+#define GLOW_TICK_MS 50            // Edge glow pulse interval
+
 // Pins - Waveshare ESP32-S3-Touch-AMOLED-1.8
 // LCD QSPI (hardwired on PCB)
 #define LCD_SDIO0 4

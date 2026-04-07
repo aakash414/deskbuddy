@@ -30,7 +30,7 @@ public:
         HTTPClient http;
         http.begin(serverUrl + "/status");
         http.addHeader("x-api-key", _apiKey);
-        http.setTimeout(10000);
+        http.setTimeout(3000);
         int code = http.GET();
 
         if (code == 200) {
@@ -42,6 +42,8 @@ public:
                 data.state        = doc["state"].as<String>();
                 data.locationLabel = doc["locationLabel"].as<String>();
 
+                data.alternatingText[0] = "";
+                data.alternatingText[1] = "";
                 JsonArray alt = doc["alternatingText"].as<JsonArray>();
                 int i = 0;
                 for (JsonVariant v : alt) {
@@ -74,7 +76,7 @@ public:
         http.begin(serverUrl + "/sensors");
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-api-key", _apiKey);
-        http.setTimeout(5000);
+        http.setTimeout(3000);
 
         JsonDocument doc;
         doc["moisture"] = moisture;
