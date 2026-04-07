@@ -1,16 +1,17 @@
 #pragma once
 
 // WiFi — fill in before flashing
-#define WIFI_SSID "HABITAT 002"
-#define WIFI_PASSWORD "002002002"
+#define WIFI_SSID "AUSA HEALTH"
+#define WIFI_PASSWORD "Prarlabs@ausa.26!"
 
 // Server
-#define SERVER_HOST "deskbuddy.local"
+#define SERVER_HOST "mbk.local"
 #define SERVER_PORT 3777
-// Fallback IP if mDNS fails — set this to your Mac Mini's IP
-#define SERVER_IP "192.168.1.100"
+// Fallback IP if mDNS fails — set this to your Raspberry Pi's IP
+#define SERVER_IP "10.156.104.124"
 // API key — must match API_KEY in server .env
-#define API_KEY "your_generated_key_here"
+#define API_KEY                                                                \
+  "58ca6bb42a7a65ad93328574cea848c8ef32c4bae28652d0cd792b9b36b95f53"
 
 // Timing (ms)
 #define SENSOR_INTERVAL 10000      // Read sensors every 10s
@@ -20,10 +21,11 @@
 
 // Display timing (ms)
 #define SENSOR_TOUCH_HOLD_MS 10000 // Touch holds "loved" state for 10s
-#define DEMO_TOUCH_DURATION_MS 30000 // Demo cycle stays active for 30s after touch
-#define TEXT_SWAP_MS 5000          // Bottom text alternation interval
-#define FRAME_TICK_MS 200          // Animation frame advance interval
-#define GLOW_TICK_MS 50            // Edge glow pulse interval
+#define DEMO_TOUCH_DURATION_MS                                                 \
+  30000                   // Demo cycle stays active for 30s after touch
+#define TEXT_SWAP_MS 5000 // Bottom text alternation interval
+#define FRAME_TICK_MS 200 // Animation frame advance interval
+#define GLOW_TICK_MS 50   // Edge glow pulse interval
 
 // Pins - Waveshare ESP32-S3-Touch-AMOLED-1.8
 // LCD QSPI (hardwired on PCB)

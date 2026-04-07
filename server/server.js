@@ -41,10 +41,12 @@ app.post("/sensors", requireApiKey, (req, res) => {
   if (moisture !== undefined && (typeof moisture !== "number" || moisture < 0 || moisture > 100)) {
     return res.status(400).json({ error: "moisture must be a number between 0 and 100" });
   }
-  if (light !== undefined && (typeof light !== "number" || light < 0)) {
-    return res.status(400).json({ error: "light must be a non-negative number" });
+  if (light !== undefined && typeof light !== "number") {
+    return res.status(400).json({ error: "light must be a number" });
   }
-  sensorStore.update({ moisture, light, touched: touched !== undefined ? !!touched : undefined });
+  // negative light = sensor unavailable, skip it
+  const validLight = light !== undefined && light >= 0 ? light : undefined;
+  sensorStore.update({ moisture, light: validLight, touched: touched !== undefined ? !!touched : undefined });
   res.json({ ok: true });
 });
 
