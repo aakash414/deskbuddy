@@ -18,15 +18,12 @@ void taskDisplay(void* param) {
 
         // Snapshot shared state — short critical section, no LVGL calls inside
         lockState();
-        bool apMode   = gApMode;
         bool wifiOk   = gWifiConnected;
         String devIP  = gDeviceIP;
         StatusData st = gStatus;
         unlockState();
 
-        if (apMode) {
-            display.showSetupMode(devIP);
-        } else if (display.inDemoMode()) {
+        if (display.inDemoMode()) {
             // touch cycling active — don't override with offline/status
         } else if (!wifiOk) {
             display.showOffline();

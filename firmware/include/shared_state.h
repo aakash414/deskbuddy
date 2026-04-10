@@ -29,9 +29,7 @@ extern SemaphoreHandle_t gStateMutex;
 extern SensorData        gSensors;
 extern StatusData        gStatus;
 extern volatile bool     gWifiConnected;
-extern volatile bool     gApMode;
-extern TaskHandle_t      gConfigUIHandle;
-extern String            gDeviceIP;   // set by WiFiManager after connect/AP start
+extern String            gDeviceIP;   // set by WiFiManager after connect
 
 inline void lockState()   { if (gStateMutex) xSemaphoreTake(gStateMutex, portMAX_DELAY); }
 inline void unlockState() { if (gStateMutex) xSemaphoreGive(gStateMutex); }

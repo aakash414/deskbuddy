@@ -29,13 +29,7 @@ if [ $? -ne 0 ] || [ -z "$SERVER" ]; then
   exit 1
 fi
 
-AIRPORT="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
-
-if [ -x "$AIRPORT" ]; then
-  BSSID=$("$AIRPORT" -I 2>/dev/null | awk '/ BSSID:/{print $2}')
-else
-  BSSID=$(system_profiler SPAirPortDataType 2>/dev/null | awk '/BSSID:/{print $2}' | head -1)
-fi
+BSSID=$(sudo /usr/bin/wdutil info 2>/dev/null | awk '/BSSID/{print $NF}' | head -1)
 
 if [ -z "$BSSID" ]; then
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: no BSSID (WiFi disconnected?)" >> "$LOG"

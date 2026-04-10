@@ -13,6 +13,7 @@ A horizontal strip of N frames is (SPRITE_SIZE * N) x SPRITE_SIZE.
 """
 
 import argparse
+import os
 import struct
 import sys
 
@@ -124,6 +125,8 @@ def main():
     parser.add_argument("--output", help="Output .h file (default: sprite_<name>.h)")
     parser.add_argument("--lvgl", action="store_true",
                         help="Output LVGL lv_img_dsc_t format instead of raw uint16_t")
+    parser.add_argument("--binary", action="store_true",
+                        help="Output raw RGB565 .bin files for LittleFS (one per frame: <name>_N.bin)")
     args = parser.parse_args()
 
     img = Image.open(args.input).convert("RGBA")
@@ -146,6 +149,19 @@ def main():
         frame_data = convert_frame(img, x_offset, args.size)
         frames.append(frame_data)
         print(f"  Frame {i}: {len(frame_data)} pixels ({len(frame_data) * 2} bytes)")
+
+    if args.binary:
+        out_dir = args.output or "."
+        os.makedirs(out_dir, exist_ok=True)
+        for i, frame in enumerate(frames):
+            bin_path = os.path.join(out_dir, f"{args.name}_{i}.bin")
+            with open(bin_path, "wb") as f:
+                for px in frame:
+                    f.write(struct.pack("<H", px))
+            print(f"  Wrote {bin_path}")
+        total_bytes = sum(len(f) * 2 for f in frames)
+        print(f"\n{args.frames} frame(s), {total_bytes} bytes total")
+        return
 
     header = generate_header(args.name, frames, args.size, args.frames, lvgl=args.lvgl)
 

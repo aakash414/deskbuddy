@@ -4,12 +4,13 @@ node_modules/
 logs/
 *.log
 dist/
+.vscode/
 
 # PlatformIO
 .pio/
 
 # Generated sprite binaries (rebuilt from source PNGs via build_sprites_hd.py)
-data/sprites/*.bin
+**/sprites/*.bin
 
 # Firmware secrets (WiFi creds, API key)
 firmware/include/config.h

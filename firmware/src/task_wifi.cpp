@@ -18,8 +18,8 @@ void taskWifi(void* param) {
     static TickType_t lastReconnect = 0;
 
     for (;;) {
-        // In AP mode: periodically try to reconnect to the STA network
-        if (gApMode) {
+        // If disconnected: retry STA connection every 60s
+        if (!gWifiConnected) {
             TickType_t now = xTaskGetTickCount();
             if ((now - lastReconnect) >= pdMS_TO_TICKS(60000)) {
                 if (wifiManager.tryReconnect()) {

@@ -18,8 +18,6 @@ SemaphoreHandle_t gStateMutex    = nullptr;
 SensorData        gSensors;
 StatusData        gStatus;
 volatile bool     gWifiConnected = false;
-volatile bool     gApMode        = false;
-TaskHandle_t      gConfigUIHandle = nullptr;
 String            gDeviceIP;
 
 // ── App objects ───────────────────────────────────────────────────────────────
@@ -40,7 +38,6 @@ static lv_disp_draw_buf_t draw_buf;
 // ── Task function declarations ────────────────────────────────────────────────
 void taskDisplay(void* param);
 void taskWifi(void* param);
-void taskConfigUI(void* param);
 
 // ── FT3168 touch (direct I2C) ────────────────────────────────────────────────
 #define FT3168_ADDR      0x38
@@ -200,7 +197,6 @@ void setup() {
     xTaskCreatePinnedToCore(taskDisplay, "display", STACK_DISPLAY, nullptr, 3, nullptr, 1);
     // Core 0 (PRO_CPU): WiFi task — same core as WiFi/BT stack for minimal context-switch overhead
     xTaskCreatePinnedToCore(taskWifi,   "wifi",    STACK_WIFI,    nullptr, 2, nullptr, 0);
-    // taskConfigUI created by WiFiManager::startAP() on Core 0 if AP mode activates
 
     Serial.println("Tasks started\n");
 }
