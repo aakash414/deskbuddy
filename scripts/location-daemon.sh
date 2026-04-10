@@ -1,6 +1,7 @@
 #!/bin/bash
 # DeskBuddy location daemon
-# Reads WiFi BSSID, maps to office location, POSTs to server
+# Reads WiFi router MAC (via ARP), maps to office location, POSTs to server
+# Uses router MAC instead of BSSID because macOS 26+ redacts BSSID everywhere
 # Run via macOS LaunchAgent every 30 seconds
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,16 +30,30 @@ if [ $? -ne 0 ] || [ -z "$SERVER" ]; then
   exit 1
 fi
 
-BSSID=$(sudo /usr/bin/wdutil info 2>/dev/null | awk '/BSSID/{print $NF}' | head -1)
-
-if [ -z "$BSSID" ]; then
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: no BSSID (WiFi disconnected?)" >> "$LOG"
+# Get default gateway IP, then resolve its MAC address via ARP table.
+# macOS 26+ redacts BSSID everywhere (wdutil, system_profiler, CoreWLAN without
+# Location Services). Router MAC from ARP is not redacted and uniquely identifies
+# the network — good enough for single-AP setups.
+GATEWAY=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+if [ -z "$GATEWAY" ]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: no default gateway (no network?)" >> "$LOG"
   exit 0
 fi
 
-# Validate BSSID format (xx:xx:xx:xx:xx:xx) to catch garbled output
+# arp output format: "? (10.x.x.x) at 0:9:f:9:a:6 on en0 ..."
+# Normalize to zero-padded colon-separated MAC (aa:bb:cc:dd:ee:ff)
+RAW_MAC=$(arp -n "$GATEWAY" 2>/dev/null | awk '{print $4}')
+if [ -z "$RAW_MAC" ] || [ "$RAW_MAC" = "(incomplete)" ]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: could not resolve gateway MAC (WiFi disconnected?)" >> "$LOG"
+  exit 0
+fi
+
+# Zero-pad each octet: 0:9:f:9:a:6 → 00:09:0f:09:0a:06
+BSSID=$(echo "$RAW_MAC" | python3 -c "import sys; print(':'.join(f'{int(x,16):02x}' for x in sys.stdin.read().strip().split(':')))")
+
+# Validate MAC format
 if ! [[ "$BSSID" =~ ^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$ ]]; then
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: invalid BSSID format: '$BSSID'" >> "$LOG"
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: invalid MAC format: '$BSSID'" >> "$LOG"
   exit 0
 fi
 
