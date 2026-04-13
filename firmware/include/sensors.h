@@ -56,6 +56,10 @@ private:
     unsigned long lastTouchTime = 0;
 
     void readMoisture() {
+#if !MOISTURE_ENABLED
+        moisture = -1;
+        return;
+#endif
         // ESP32-S3 ADC2 + WiFi: hardware arbiter allows concurrent use
         // but reads may occasionally fail. Retry up to 3 times.
         int raw = 0;
@@ -73,14 +77,6 @@ private:
         if (!success) {
             Serial.println("Moisture: ADC read failed after 3 retries");
             return; // Keep last known value
-        }
-
-        // Detect disconnected sensor: floating pin reads near 0 or rail voltage.
-        // Capacitive sensor v2.0 outputs 1200-2800 range; anything outside
-        // 100-3900 means no sensor is connected.
-        if (raw < 100 || raw > 3900) {
-            moisture = -1; // No sensor
-            return;
         }
 
         // Map ADC to 0-100% (invert: high ADC = dry = low moisture)
