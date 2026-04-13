@@ -198,26 +198,29 @@ private:
             }
         }
 
-        // If no frames loaded (sprite not available), fall back to sleeping
+        // If no frames loaded, try fallbacks: coding (desk-appropriate) then sleeping
         if (!framesLoaded && strcmp(state, "sleeping") != 0) {
-            for (int fi = 0; fi < FRAME_COUNT; fi++) {
-                if (!frameBufs[fi]) continue;
-                char path[64];
-                snprintf(path, sizeof(path), "/sprites/sleeping_%d.bin", fi);
-                File f = LittleFS.open(path, "r");
-                if (!f) continue;
-                if (f.size() == FRAME_BYTES) {
-                    f.read(frameBufs[fi], FRAME_BYTES);
-                    frameDescs[fi].data = frameBufs[fi];
+            const char* fallbacks[] = {"coding", "sleeping"};
+            for (int fb = 0; fb < 2 && !framesLoaded; fb++) {
+                for (int fi = 0; fi < FRAME_COUNT; fi++) {
+                    if (!frameBufs[fi]) continue;
+                    char path[64];
+                    snprintf(path, sizeof(path), "/sprites/%s_%d.bin", fallbacks[fb], fi);
+                    File f = LittleFS.open(path, "r");
+                    if (!f) continue;
+                    if (f.size() == FRAME_BYTES) {
+                        f.read(frameBufs[fi], FRAME_BYTES);
+                        frameDescs[fi].data = frameBufs[fi];
+                    }
+                    f.close();
                 }
-                f.close();
-            }
-            for (int fi = 0; fi < FRAME_COUNT; fi++) {
-                if (frameDescs[fi].data) {
-                    currentFrame = fi;
-                    if (ghostImg) lv_img_set_src(ghostImg, &frameDescs[fi]);
-                    framesLoaded = true;
-                    break;
+                for (int fi = 0; fi < FRAME_COUNT; fi++) {
+                    if (frameDescs[fi].data) {
+                        currentFrame = fi;
+                        if (ghostImg) lv_img_set_src(ghostImg, &frameDescs[fi]);
+                        framesLoaded = true;
+                        break;
+                    }
                 }
             }
         }
