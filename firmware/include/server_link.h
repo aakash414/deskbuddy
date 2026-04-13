@@ -79,8 +79,8 @@ public:
         http.setTimeout(3000);
 
         JsonDocument doc;
-        doc["moisture"] = moisture;
-        doc["light"]    = light;
+        if (moisture >= 0) doc["moisture"] = moisture;
+        if (light >= 0) doc["light"] = light;
         doc["touched"]  = touched;
 
         String body;

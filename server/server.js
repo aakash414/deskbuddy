@@ -38,15 +38,16 @@ const VALID_STATES = Object.keys(STATES);
 // POST /sensors — ESP32 pushes every 10s
 app.post("/sensors", requireApiKey, (req, res) => {
   const { moisture, light, touched } = req.body;
-  if (moisture !== undefined && (typeof moisture !== "number" || moisture < 0 || moisture > 100)) {
-    return res.status(400).json({ error: "moisture must be a number between 0 and 100" });
+  if (moisture !== undefined && (typeof moisture !== "number" || moisture > 100)) {
+    return res.status(400).json({ error: "moisture must be a number up to 100" });
   }
   if (light !== undefined && typeof light !== "number") {
     return res.status(400).json({ error: "light must be a number" });
   }
-  // negative light = sensor unavailable, skip it
+  // negative value = sensor unavailable, skip it
+  const validMoisture = moisture !== undefined && moisture >= 0 ? moisture : undefined;
   const validLight = light !== undefined && light >= 0 ? light : undefined;
-  sensorStore.update({ moisture, light: validLight, touched: touched !== undefined ? !!touched : undefined });
+  sensorStore.update({ moisture: validMoisture, light: validLight, touched: touched !== undefined ? !!touched : undefined });
   res.json({ ok: true });
 });
 

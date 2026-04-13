@@ -75,6 +75,14 @@ private:
             return; // Keep last known value
         }
 
+        // Detect disconnected sensor: floating pin reads near 0 or rail voltage.
+        // Capacitive sensor v2.0 outputs 1200-2800 range; anything outside
+        // 100-3900 means no sensor is connected.
+        if (raw < 100 || raw > 3900) {
+            moisture = -1; // No sensor
+            return;
+        }
+
         // Map ADC to 0-100% (invert: high ADC = dry = low moisture)
         float pct = (float)(MOISTURE_AIR - raw) / (float)(MOISTURE_AIR - MOISTURE_WATER) * 100.0f;
         moisture = constrain(pct, 0.0f, 100.0f);
