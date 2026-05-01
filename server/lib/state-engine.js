@@ -99,6 +99,7 @@ function resolveState() {
     state,
     location: location.location,
     locationLabel,
+    isAway: locationStore.isAway(),
     alternatingText: altTexts,
     calendar: {
       inMeeting: calendar.inMeeting,

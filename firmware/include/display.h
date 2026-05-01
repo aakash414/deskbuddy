@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <lvgl.h>
 #include <LittleFS.h>
+#include <Arduino_GFX.h>
+#include <display/Arduino_SH8601.h>
 #include "config.h"
 #include "shared_state.h"
 
@@ -33,19 +35,28 @@ static const int STATE_COUNT = sizeof(STATE_DEFS) / sizeof(STATE_DEFS[0]);
 #define FRAME_COUNT 4
 #define FRAME_BYTES (SPRITE_W * SPRITE_H * 2)
 
+enum PowerMode { POWER_OFF, POWER_DIM, POWER_FULL };
+
 class Display {
 public:
     void begin() {
         buildUI();
+        // UI starts at full brightness (matches gfx->setBrightness(200) in initDisplay).
+        currentPower = POWER_FULL;
+        wakeEndMs    = millis() + WAKE_DURATION_AT_DESK_MS;
         Serial.println("Display UI built");
     }
 
     void update(const StatusData& data) {
         if (!data.valid) return;
 
+        // Always track latest away signal so idle target stays current.
+        lastIsAway = data.isAway;
+
         if (data.state != currentState) {
             currentState = data.state;
             applyState(data.state);
+            wake();   // any state change wakes the screen
         }
 
         altTextCount = data.altTextCount;
@@ -64,6 +75,9 @@ public:
         altTexts[0] = "Offline";
         altTextCount = 1;
         if (labelBottom) lv_label_set_text(labelBottom, altTexts[0].c_str());
+        // Diagnostic states should be readable.
+        applyPower(POWER_FULL);
+        wakeEndMs = 0;   // no auto-dim while offline
     }
 
     // WiFi connected but server not yet reached — show IP so user can open web UI
@@ -75,6 +89,8 @@ public:
         altTexts[1] = "mbk.local";
         altTextCount = 2;
         if (labelBottom) lv_label_set_text(labelBottom, altTexts[0].c_str());
+        applyPower(POWER_FULL);
+        wakeEndMs = 0;
     }
 
     // Touch: cycle through demo states
@@ -88,11 +104,36 @@ public:
         altTexts[0] = currentState;
         altTextCount = 1;
         if (labelBottom) lv_label_set_text(labelBottom, currentState.c_str());
+        wake();
     }
 
     bool inDemoMode() { return lastTouchMs > 0 && millis() - lastTouchMs < DEMO_TOUCH_DURATION_MS; }
 
+    // Bring screen to full brightness for the wake window. Window length depends on
+    // whether the user is currently away (longer) or at the desk (shorter).
+    void wake() {
+        applyPower(POWER_FULL);
+        wakeEndMs = millis() +
+                    (lastIsAway ? WAKE_DURATION_AWAY_MS : WAKE_DURATION_AT_DESK_MS);
+    }
+
     void tick() {
+        // Power state — drop to idle target when wake window expires.
+        if (wakeEndMs && millis() > wakeEndMs) {
+            wakeEndMs = 0;
+            applyPower(lastIsAway ? POWER_OFF : POWER_DIM);
+        }
+
+        // Skip UI updates while panel is asleep — no point churning LVGL.
+        if (currentPower == POWER_OFF) return;
+
+        // Periodic pixel shift to spread sprite wear across the panel.
+        if (ghostImg && millis() - lastShiftMs > PIXEL_SHIFT_INTERVAL_MS) {
+            shiftIdx = (shiftIdx + 1) % 4;
+            applySpriteOffset();
+            lastShiftMs = millis();
+        }
+
         // Alternate bottom text every TEXT_SWAP_MS
         if (altTextCount > 1 && millis() - lastTextSwap > TEXT_SWAP_MS) {
             currentTextIdx = (currentTextIdx + 1) % altTextCount;
@@ -134,6 +175,45 @@ private:
     unsigned long lastTouchMs   = 0;
 
     uint16_t   currentAnimSpeed = 300;
+
+    // Power state
+    PowerMode     currentPower = POWER_FULL;
+    unsigned long wakeEndMs    = 0;     // 0 = no active wake window
+    bool          lastIsAway   = false;
+
+    // Pixel-shift cycle — prevents AMOLED burn-in on the static sprite area.
+    unsigned long lastShiftMs  = 0;
+    int           shiftIdx     = 0;
+
+    // 4-position cycle, walked once every PIXEL_SHIFT_INTERVAL_MS.
+    static int shiftDx(int idx) {
+        const int dx[4] = { -PIXEL_SHIFT_PX, 0,  PIXEL_SHIFT_PX, 0 };
+        return dx[idx & 3];
+    }
+    static int shiftDy(int idx) {
+        const int dy[4] = { 0, -PIXEL_SHIFT_PX, 0,  PIXEL_SHIFT_PX };
+        return dy[idx & 3];
+    }
+
+    void applyPower(PowerMode m) {
+        if (m == currentPower) return;
+        if (m == POWER_OFF) {
+            if (gfx) gfx->displayOff();
+        } else {
+            if (currentPower == POWER_OFF && gfx) gfx->displayOn();
+            if (gfx) gfx->setBrightness(
+                m == POWER_FULL ? DISPLAY_BRIGHTNESS_FULL : DISPLAY_BRIGHTNESS_DIM);
+        }
+        currentPower = m;
+    }
+
+    void applySpriteOffset() {
+        if (!ghostImg) return;
+        // Re-align (text label stays put — its area is small and changes contents anyway).
+        lv_obj_align(ghostImg, LV_ALIGN_CENTER, shiftDx(shiftIdx), -24 + shiftDy(shiftIdx));
+        // Restart bob animation around the new baseline so the y-offset sticks.
+        startBobAnimation(currentAnimSpeed);
+    }
 
     // ── sprite loading ───────────────────────────────────────────────────────
 
@@ -274,7 +354,8 @@ private:
     void startBobAnimation(uint16_t periodMs) {
         if (!ghostImg) return;
         currentAnimSpeed = periodMs;
-        const int32_t baseY = (LCD_HEIGHT / 2) - 24 - (SPRITE_H / 2);
+        // Add current pixel-shift dy so the bob baseline tracks the burn-in shift.
+        const int32_t baseY = (LCD_HEIGHT / 2) - 24 - (SPRITE_H / 2) + shiftDy(shiftIdx);
         lv_anim_t a;
         lv_anim_init(&a);
         lv_anim_set_var(&a, ghostImg);

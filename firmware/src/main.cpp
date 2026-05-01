@@ -29,7 +29,7 @@ Display     display;
 // ── Hardware objects ──────────────────────────────────────────────────────────
 static Arduino_DataBus *bus = new Arduino_ESP32QSPI(
     LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
-static Arduino_SH8601 *gfx = new Arduino_SH8601(
+Arduino_SH8601 *gfx = new Arduino_SH8601(
     bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, LCD_WIDTH, LCD_HEIGHT);
 
 static Adafruit_XCA9554 expander;

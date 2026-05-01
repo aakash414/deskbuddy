@@ -21,8 +21,13 @@ struct StatusData {
     String moistureStatus;
     float  light        = 0;
     String lightStatus;
+    bool   isAway       = false;
     bool   valid        = false;
 };
+
+// Forward decl so headers needing the gfx pointer don't have to pull in
+// the full Arduino_GFX library.
+class Arduino_SH8601;
 
 // Globals — defined in main.cpp, declared extern here
 extern SemaphoreHandle_t gStateMutex;
@@ -30,6 +35,7 @@ extern SensorData        gSensors;
 extern StatusData        gStatus;
 extern volatile bool     gWifiConnected;
 extern String            gDeviceIP;   // set by WiFiManager after connect
+extern Arduino_SH8601*   gfx;         // display driver; used for brightness + sleep
 
 inline void lockState()   { if (gStateMutex) xSemaphoreTake(gStateMutex, portMAX_DELAY); }
 inline void unlockState() { if (gStateMutex) xSemaphoreGive(gStateMutex); }

@@ -56,6 +56,8 @@ public:
                 data.light         = doc["plant"]["light"] | -1.0f;
                 data.lightStatus   = doc["plant"]["lightStatus"].as<String>();
 
+                data.isAway = doc["isAway"] | false;
+
                 data.valid = true;
                 lastSuccessfulFetch = millis();
             } else {
